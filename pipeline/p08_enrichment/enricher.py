@@ -404,6 +404,16 @@ INVENTORY_NOISE_TAGS = {"secret_scan", "secret"}
 MODEL_PATH_PATTERN   = re.compile(r'\.(h5|pkl|pt|pth|onnx|pb|tflite)$', re.I)
 FILE_PATH_PATTERN    = re.compile(r'^\.\.[/\\]|^[a-zA-Z]:[/\\]')
 
+_SSRF_PARAM_RE       = re.compile(
+    r'[?&](?:url|uri|redirect|callback|webhook|dest|destination|return|next|target|endpoint|proxy|forward|fetch|load)=',
+    re.I,
+)
+_WRITE_METHOD_PARAM_RE = re.compile(r'/\{[^}]+\}|/:[a-zA-Z_]\w*|/\d{2,}')
+_SENSITIVE_FLOW_RE   = re.compile(
+    r'/(?:payment|transfer|withdraw|checkout|purchase|refund|transaction|payout|topup|deposit|wallet|billing)(?:/|$)',
+    re.I,
+)
+
 
 def _parse_version(version_str: str) -> Optional[Tuple[int, int, int]]:
     if not version_str or version_str in ("unknown", "*", "latest", ""):
@@ -611,7 +621,7 @@ class Enricher:
             combined += " " + entry.tech_stack.lower()
 
         for pkg_name, cve_list in PACKAGE_CVE_DATABASE.items():
-            pkg_lower    = pkg_name.lower()
+            pkg_lower     = pkg_name.lower()
             installed_ver = self._pkg_version_map.get(pkg_lower)
 
             if installed_ver is None:
@@ -663,12 +673,29 @@ class Enricher:
         return findings
 
     def _enrich_owasp_flags(self, entry) -> List[Dict]:
-        flags = list(entry.owasp_flags)
-        ep    = entry.endpoint.lower()
-        method = entry.method.upper()
+        flags         = list(entry.owasp_flags)
+        existing_cats = {f.get("category") for f in flags}
+        ep            = entry.endpoint.lower()
+        method        = entry.method.upper()
 
-        if entry.auth_type in ("None detected", "UNKNOWN") and entry.functional_type not in ("health",):
-            if not any(f.get("category") == "API2" for f in flags):
+        if "API1" not in existing_cats:
+            if (
+                _WRITE_METHOD_PARAM_RE.search(entry.endpoint)
+                and entry.auth_type in ("None detected", "UNKNOWN")
+                and entry.functional_type not in ("health",)
+            ):
+                flags.append({
+                    "category": "API1",
+                    "name":     "Broken Object Level Authorization (BOLA)",
+                    "finding":  "Parameterized endpoint with no confirmed authentication. "
+                                "Object-level access control must be verified on every request.",
+                    "severity": "HIGH",
+                    "endpoint": entry.endpoint,
+                    "source":   "inferred",
+                })
+
+        if "API2" not in existing_cats:
+            if entry.auth_type in ("None detected", "UNKNOWN") and entry.functional_type not in ("health",):
                 flags.append({
                     "category": "API2",
                     "name":     "Broken Authentication",
@@ -679,52 +706,32 @@ class Enricher:
                     "source":   "inferred",
                 })
 
-        if entry.endpoint.startswith("http://"):
-            if not any(f.get("category") == "API8" and "TLS" in f.get("finding", "") for f in flags):
+        if "API3" not in existing_cats:
+            if method in ("POST", "PUT", "PATCH") and entry.auth_type in ("None detected", "UNKNOWN"):
                 flags.append({
-                    "category": "API8",
-                    "name":     "Security Misconfiguration",
-                    "finding":  "Endpoint served over unencrypted HTTP. TLS/HTTPS should be enforced.",
-                    "severity": "HIGH",
+                    "category": "API3",
+                    "name":     "Broken Object Property Level Authorization",
+                    "finding":  "Write-method endpoint with no confirmed authentication. "
+                                "Verify clients cannot supply unexpected fields that alter privileged properties.",
+                    "severity": "MEDIUM",
                     "endpoint": entry.endpoint,
                     "source":   "inferred",
                 })
 
-        if method == "UNKNOWN":
-            flags.append({
-                "category": "API9",
-                "name":     "Improper Inventory Management",
-                "finding":  "HTTP method undocumented. Endpoint contract is unknown.",
-                "severity": "MEDIUM",
-                "endpoint": entry.endpoint,
-                "source":   "inferred",
-            })
-
-        if entry.api_version is None and "/api/" in ep:
-            flags.append({
-                "category": "API9",
-                "name":     "Improper Inventory Management",
-                "finding":  "No API versioning detected. Versioning is required for lifecycle management.",
-                "severity": "LOW",
-                "endpoint": entry.endpoint,
-                "source":   "inferred",
-            })
-
-        if entry.parameters and entry.auth_type in ("None detected", "UNKNOWN"):
-            params_str = ", ".join(p["name"] for p in entry.parameters)
-            if not any(f.get("category") == "API1" for f in flags):
+        if "API4" not in existing_cats:
+            if entry.functional_type in ("upload",) and method in ("POST", "PUT"):
                 flags.append({
-                    "category": "API1",
-                    "name":     "Broken Object Level Authorization (BOLA)",
-                    "finding":  f"Endpoint accepts object identifier(s) [{params_str}] "
-                                f"with no confirmed authentication. BOLA testing recommended.",
-                    "severity": "HIGH",
+                    "category": "API4",
+                    "name":     "Unrestricted Resource Consumption",
+                    "finding":  "File upload endpoint detected. Verify file size limits, "
+                                "rate limiting, and file type validation are enforced.",
+                    "severity": "MEDIUM",
                     "endpoint": entry.endpoint,
                     "source":   "inferred",
                 })
 
-        if entry.functional_type == "admin" and entry.auth_type in ("None detected", "UNKNOWN"):
-            if not any(f.get("category") == "API5" for f in flags):
+        if "API5" not in existing_cats:
+            if entry.functional_type == "admin" and entry.auth_type in ("None detected", "UNKNOWN"):
                 flags.append({
                     "category": "API5",
                     "name":     "Broken Function Level Authorization",
@@ -734,41 +741,84 @@ class Enricher:
                     "source":   "inferred",
                 })
 
-        if entry.downstream_dependencies:
-            deps = ", ".join(entry.downstream_dependencies[:3])
-            flags.append({
-                "category": "API10",
-                "name":     "Unsafe Consumption of Third-Party APIs",
-                "finding":  f"Endpoint integrates with external services [{deps}]. "
-                            f"Validate all external API responses; sanitize before use.",
-                "severity": "MEDIUM",
-                "endpoint": entry.endpoint,
-                "source":   "inferred",
-            })
-
-        if entry.functional_type in ("upload",) and method in ("POST", "PUT"):
-            flags.append({
-                "category": "API4",
-                "name":     "Unrestricted Resource Consumption",
-                "finding":  "File upload endpoint detected. Verify file size limits, "
-                            "rate limiting, and file type validation.",
-                "severity": "MEDIUM",
-                "endpoint": entry.endpoint,
-                "source":   "inferred",
-            })
-
-        if entry.cve_findings:
-            highest_cvss = max((c.get("cvss", 0) for c in entry.cve_findings), default=0)
-            sev = "CRITICAL" if highest_cvss >= 9.0 else "HIGH" if highest_cvss >= 7.0 else "MEDIUM"
-            if not any(f.get("category") == "API6" for f in flags):
+        if "API6" not in existing_cats:
+            if entry.cve_findings:
+                highest_cvss = max((c.get("cvss", 0) for c in entry.cve_findings), default=0)
+                sev     = "CRITICAL" if highest_cvss >= 9.0 else "HIGH" if highest_cvss >= 7.0 else "MEDIUM"
                 cve_ids = ", ".join(c["cve"] for c in entry.cve_findings[:3])
                 flags.append({
                     "category": "API6",
                     "name":     "Unrestricted Access to Sensitive Business Flows",
-                    "finding":  f"Vulnerable dependency detected affecting this endpoint's stack: {cve_ids}",
+                    "finding":  f"Vulnerable dependency affecting this endpoint's stack: {cve_ids}",
                     "severity": sev,
                     "endpoint": entry.endpoint,
                     "source":   "cve_correlation",
+                })
+            elif _SENSITIVE_FLOW_RE.search(entry.endpoint) and entry.auth_type in ("None detected", "UNKNOWN"):
+                flags.append({
+                    "category": "API6",
+                    "name":     "Unrestricted Access to Sensitive Business Flows",
+                    "finding":  "Sensitive business flow endpoint (payment/transfer/checkout) inferred from path "
+                                "with no confirmed authentication. Manual verification required.",
+                    "severity": "HIGH",
+                    "endpoint": entry.endpoint,
+                    "source":   "inferred",
+                })
+
+        if "API7" not in existing_cats:
+            if _SSRF_PARAM_RE.search(entry.endpoint) or entry.functional_type == "integration":
+                flags.append({
+                    "category": "API7",
+                    "name":     "Server Side Request Forgery",
+                    "finding":  "Endpoint path or functional type suggests it may accept or forward URLs. "
+                                "Test for SSRF via redirect, callback, webhook, and proxy parameters.",
+                    "severity": "MEDIUM",
+                    "endpoint": entry.endpoint,
+                    "source":   "inferred",
+                })
+
+        if "API8" not in existing_cats:
+            if entry.endpoint.startswith("http://"):
+                flags.append({
+                    "category": "API8",
+                    "name":     "Security Misconfiguration",
+                    "finding":  "Endpoint served over unencrypted HTTP. TLS/HTTPS must be enforced.",
+                    "severity": "HIGH",
+                    "endpoint": entry.endpoint,
+                    "source":   "inferred",
+                })
+
+        if "API9" not in existing_cats:
+            if method == "UNKNOWN":
+                flags.append({
+                    "category": "API9",
+                    "name":     "Improper Inventory Management",
+                    "finding":  "HTTP method undocumented. Endpoint contract is unknown.",
+                    "severity": "MEDIUM",
+                    "endpoint": entry.endpoint,
+                    "source":   "inferred",
+                })
+            elif entry.api_version is None and "/api/" in ep:
+                flags.append({
+                    "category": "API9",
+                    "name":     "Improper Inventory Management",
+                    "finding":  "No API versioning detected. Versioning is required for lifecycle management.",
+                    "severity": "LOW",
+                    "endpoint": entry.endpoint,
+                    "source":   "inferred",
+                })
+
+        if "API10" not in existing_cats:
+            if entry.downstream_dependencies:
+                deps = ", ".join(entry.downstream_dependencies[:3])
+                flags.append({
+                    "category": "API10",
+                    "name":     "Unsafe Consumption of Third-Party APIs",
+                    "finding":  f"Endpoint integrates with external services [{deps}]. "
+                                f"Validate all external API responses and sanitise before use.",
+                    "severity": "MEDIUM",
+                    "endpoint": entry.endpoint,
+                    "source":   "inferred",
                 })
 
         return flags

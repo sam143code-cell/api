@@ -16,9 +16,16 @@ from config   import build_cfg, REPO_CLONE_ROOT, SCANS_DIR
 from scanner  import run_pipeline
 from database import SessionLocal, get_db
 from db_models import (
-    Engagement, ApiEndpoint, DiscoverySource, OWASPFinding,
-    OWASPConformance, SecretFinding, OutboundApi, OutboundDependency,
-    PackageDependency, CVEFinding, ShadowRogueRegister,
+    Engagement,
+    ApiEndpoint,
+    Discovery_Source,
+    OWASP_Finding,
+    OWASP_Conformance,
+    Secret_Finding,
+    Outbound_Api,
+    Package_Dependency,
+    CVE_Finding,
+    Shadow_Rogue_Register,
 )
 
 try:
@@ -30,7 +37,6 @@ except ImportError:
 router = APIRouter()
 
 _scan_registry: Dict[str, dict] = {}
-
 
 
 def _handle_remove_readonly(func, path, excinfo):
@@ -100,8 +106,6 @@ def _decode_and_save_files(
     return saved
 
 
-
-
 def _parse_dt(val):
     if not val:
         return None
@@ -147,23 +151,16 @@ def _safe_severity_secret(val):
 
 
 def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
-    """
-    Read api_discovery_full.json and write all 12 tables.
-    Called directly inside the background task — no HTTP round-trip needed.
-    """
     if not os.path.exists(output_path):
         raise FileNotFoundError(f"Output file not found: {output_path}")
 
     with open(output_path, "r", encoding="utf-8") as f:
         body = json.load(f)
 
-    engagement = db.query(Engagement).filter_by(
-        EngagementId=engagement_id, IsActive=1
-    ).first()
+    engagement = db.query(Engagement).filter_by(Id=engagement_id, IsActive=1).first()
     if not engagement:
         raise ValueError(f"Engagement {engagement_id} not found or inactive")
 
-   
     summary          = body.get("summary", {})
     exec_summary     = body.get("executive_summary", {})
     key_metrics      = exec_summary.get("key_metrics", {})
@@ -173,7 +170,6 @@ def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
     outbound_info    = inbound_outbound.get("outbound_apis", {})
     sensitivity      = summary.get("data_sensitivity", {})
 
-    
     engagement.OverallRisk           = exec_summary.get("overall_risk", "UNKNOWN")
     engagement.Narrative             = exec_summary.get("narrative")
     engagement.TotalApis             = summary.get("total", 0)
@@ -205,7 +201,6 @@ def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
     engagement.TechStackFrontend     = tech_stack.get("frontend")
     db.flush()
 
-   
     endpoint_url_to_id: dict[str, int] = {}
     shadow_rogue_rows = []
 
@@ -244,13 +239,13 @@ def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
             IsActive          = 1,
         )
         db.add(row)
-        db.flush()  
+        db.flush()
 
-        endpoint_url_to_id[url] = row.EndpointId
+        endpoint_url_to_id[url] = row.Id
 
         for src in ep.get("discovered_by", []):
-            db.add(DiscoverySource(
-                EndpointId   = row.EndpointId,
+            db.add(Discovery_Source(
+                EndpointId   = row.Id,
                 EngagementId = engagement_id,
                 SourceName   = str(src)[:100],
                 IsActive     = 1,
@@ -258,9 +253,9 @@ def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
 
         cls = _safe_classification(ep.get("classification"))
         if cls in ("Shadow", "Rogue"):
-            shadow_rogue_rows.append(ShadowRogueRegister(
+            shadow_rogue_rows.append(Shadow_Rogue_Register(
                 EngagementId   = engagement_id,
-                EndpointId     = row.EndpointId,
+                EndpointId     = row.Id,
                 Classification = cls,
                 RiskScore      = score,
                 ActionRequired = ep.get("remediation"),
@@ -270,11 +265,10 @@ def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
     db.bulk_save_objects(shadow_rogue_rows)
     db.flush()
 
-    
     owasp_rows = []
     for f in body.get("owasp_findings", []):
         ep_url = f.get("endpoint") or f.get("endpoint_url")
-        owasp_rows.append(OWASPFinding(
+        owasp_rows.append(OWASP_Finding(
             EndpointId   = endpoint_url_to_id.get(ep_url) if ep_url else None,
             EngagementId = engagement_id,
             Category     = (f.get("category") or "")[:20] or None,
@@ -290,7 +284,7 @@ def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
     db.flush()
 
     conformance_rows = [
-        OWASPConformance(
+        OWASP_Conformance(
             EngagementId     = engagement_id,
             OWASPId          = (c.get("owasp_id") or "")[:10] or None,
             Name             = (c.get("name") or "")[:200] or None,
@@ -306,7 +300,7 @@ def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
     db.flush()
 
     secret_rows = [
-        SecretFinding(
+        Secret_Finding(
             EngagementId   = engagement_id,
             SecretType     = (s.get("type") or "")[:100] or None,
             FilePath       = s.get("file"),
@@ -323,7 +317,7 @@ def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
     db.flush()
 
     outbound_api_rows = [
-        OutboundApi(
+        Outbound_Api(
             EngagementId   = engagement_id,
             Url            = a.get("url"),
             Host           = (a.get("host") or "")[:255] or None,
@@ -346,23 +340,8 @@ def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
     db.bulk_save_objects(outbound_api_rows)
     db.flush()
 
-    dep_rows = [
-        OutboundDependency(
-            EngagementId   = engagement_id,
-            Integration    = (d.get("integration") or "")[:200] or None,
-            Category       = (d.get("category") or "")[:100] or None,
-            Exposure       = _safe_exposure(d.get("exposure")),
-            Risk           = _safe_risk(d.get("risk")),
-            Recommendation = d.get("recommendation"),
-            IsActive       = 1,
-        )
-        for d in body.get("outbound_dependencies", [])
-    ]
-    db.bulk_save_objects(dep_rows)
-    db.flush()
-
     package_rows = [
-        PackageDependency(
+        Package_Dependency(
             EngagementId = engagement_id,
             Name         = (p.get("name") or "")[:255] or None,
             Version      = (p.get("version") or "")[:100] or None,
@@ -376,7 +355,7 @@ def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
     db.flush()
 
     cve_rows = [
-        CVEFinding(
+        CVE_Finding(
             EngagementId  = engagement_id,
             CVENumber     = (c.get("cve") or "")[:50] or None,
             Description   = c.get("desc") or c.get("description"),
@@ -400,13 +379,10 @@ def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
         "conformance":   len(conformance_rows),
         "secrets":       len(secret_rows),
         "outbound_apis": len(outbound_api_rows),
-        "dependencies":  len(dep_rows),
         "packages":      len(package_rows),
         "cve_findings":  len(cve_rows),
         "shadow_rogue":  len(shadow_rogue_rows),
     }
-
-
 
 
 def _create_engagement_record(
@@ -426,9 +402,7 @@ def _create_engagement_record(
     db.add(engagement)
     db.commit()
     db.refresh(engagement)
-    return engagement.EngagementId
-
-
+    return engagement.Id
 
 
 async def _run_scan(scan_id: str, request: ScanRequest, has_pcap: bool):
@@ -437,7 +411,6 @@ async def _run_scan(scan_id: str, request: ScanRequest, has_pcap: bool):
     record["started_at"] = datetime.now(timezone.utc).isoformat()
 
     try:
-
         repo_path = None
         if request.repo_url:
             if not request.username or not request.access_token:
@@ -448,7 +421,6 @@ async def _run_scan(scan_id: str, request: ScanRequest, has_pcap: bool):
                 raise RuntimeError(clone_result["message"])
 
             repo_path = clone_result["path"]
-
 
         app_name = request.app_name or request.client_name
         cfg      = build_cfg(
@@ -465,10 +437,8 @@ async def _run_scan(scan_id: str, request: ScanRequest, has_pcap: bool):
         record["summary"]      = result["summary"]
         record["output_files"] = result["output_files"]
 
-
-        output_files  = result.get("output_files") or {}
-        output_path   = output_files.get("api_discovery_full.json")
-
+        output_files = result.get("output_files") or {}
+        output_path  = output_files.get("api_discovery_full.json")
 
         if not output_path or not os.path.exists(output_path):
             output_path = os.path.join(
@@ -496,7 +466,6 @@ async def _run_scan(scan_id: str, request: ScanRequest, has_pcap: bool):
         print(f"[scan:{scan_id}] FAILED — {exc}")
 
 
-
 @router.post(
     "/scan",
     response_model = ScanAccepted,
@@ -508,7 +477,6 @@ async def trigger_scan(
     background_tasks: BackgroundTasks,
     db:               Session = Depends(get_db),
 ):
-    
     existing = [
         sid for sid, rec in _scan_registry.items()
         if rec["status"] in (ScanStatus.queued, ScanStatus.running)
@@ -527,7 +495,6 @@ async def trigger_scan(
     pcap_dir = os.path.join(scan_dir, "inputs", "pcap")
     spec_dir = os.path.join(scan_dir, "inputs", "openapi_specs")
 
-    
     try:
         saved_pcaps = _decode_and_save_files(
             request.pcap_files, request.pcap_filenames, pcap_dir, ".pcap",

@@ -4,12 +4,12 @@ from enum import Enum
 
 
 class ScanRequest(BaseModel):
-    domain:            str                 = Field(...,  description="Target domain, e.g. http://10.20.40.14:7085")
+    domain:            str                 = Field(...,  description="Target domain")
     repo_url:          Optional[str]       = Field(None, description="Git repository URL")
     username:          Optional[str]       = Field(None, description="Git username")
     access_token:      Optional[str]       = Field(None, description="Git PAT or password")
-    client_name:       Optional[str]       = Field("Client", description="Client label for reports")
-    app_name:          Optional[str]       = Field(None, description="Application name for report narrative")
+    client_name:       Optional[str]       = Field("Client", description="Client label ")
+    app_name:          Optional[str]       = Field(None, description="Application name ")
     pcap_files:        Optional[List[str]] = Field(None, description="List of base64-encoded .pcap file contents")
     openapi_specs:     Optional[List[str]] = Field(None, description="List of base64-encoded OpenAPI/Swagger spec file contents")
     pcap_filenames:    Optional[List[str]] = Field(None, description="Original filenames for pcap_files (same order)")

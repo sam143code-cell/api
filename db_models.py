@@ -4,18 +4,15 @@ from database import Base
 
 
 class Engagement(Base):
-    __tablename__ = "Engagement"
+    __tablename__ = "ii_apibom_engagement"
 
-    EngagementId          = Column(Integer, primary_key=True, autoincrement=True)
+    Id                    = Column("Id", Integer, primary_key=True, autoincrement=True)
     EngagementName        = Column(String(255), nullable=False)
     ClientName            = Column(String(255), nullable=False)
     Mode                  = Column(Enum("passive", "active"), default="passive")
-    ScanTargetEnvironment = Column(String(100))
-    SchemaVersion         = Column(String(20))
-    GeneratedAt           = Column(DateTime)
     StartedAt             = Column(DateTime)
     CompletedAt           = Column(DateTime)
-    OverallRisk           = Column(Enum("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"), default="UNKNOWN")
+    OverallRisk           = Column(String(50), default="UNKNOWN")
     Narrative             = Column(Text)
     TotalApis             = Column(Integer, default=0)
     InboundApiCount       = Column(Integer, default=0)
@@ -44,24 +41,24 @@ class Engagement(Base):
     TechStackLanguage     = Column(String(100))
     TechStackFramework    = Column(String(100))
     TechStackFrontend     = Column(String(100))
-    CreatedAt             = Column(DateTime, default=datetime.utcnow)
-    UpdatedAt             = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    IsActive              = Column(SmallInteger, default=0)
+    CreatedDate           = Column(DateTime, default=datetime.utcnow)
+    UpdatedDate           = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    IsActive              = Column(SmallInteger, default=1)
 
 
 class ApiEndpoint(Base):
-    __tablename__ = "api_endpoints"
+    __tablename__ = "ii_apibom_endpoint"
 
-    EndpointId        = Column(Integer, primary_key=True, autoincrement=True)
-    EngagementId      = Column(Integer, ForeignKey("Engagement.EngagementId"), nullable=False)
-    ApiDirection      = Column(Enum("inbound", "outbound"), default="inbound")
+    Id                = Column("Id", Integer, primary_key=True, autoincrement=True)
+    EngagementId      = Column(Integer, ForeignKey("ii_apibom_engagement.Id"), nullable=False)
+    ApiDirection      = Column(String(20), default="inbound")
     EndpointUrl       = Column(Text, nullable=False)
     HttpMethod        = Column(String(20), default="UNKNOWN")
-    Classification    = Column(Enum("Valid", "Shadow", "New", "Rogue", "UNCLASSIFIED"), default="UNCLASSIFIED")
+    Classification    = Column(String(50), default="UNCLASSIFIED")
     RiskScore         = Column(Integer, default=0)
-    RiskBand          = Column(Enum("CRITICAL", "HIGH", "MEDIUM", "LOW"), default="LOW")
+    RiskBand          = Column(String(20), default="LOW")
     AuthType          = Column(String(100))
-    DataSensitivity   = Column(Enum("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"), default="UNKNOWN")
+    DataSensitivity   = Column(String(20), default="UNKNOWN")
     Exposure          = Column(String(50))
     Environment       = Column(String(100))
     FunctionalModule  = Column(String(200))
@@ -78,169 +75,154 @@ class ApiEndpoint(Base):
     SourceFile        = Column(Text)
     FirstSeen         = Column(DateTime)
     LastSeen          = Column(DateTime)
-    CreatedAt         = Column(DateTime, default=datetime.utcnow)
-    UpdatedAt         = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    IsActive          = Column(SmallInteger, default=0)
+    CreatedDate       = Column(DateTime, default=datetime.utcnow)
+    UpdatedDate       = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    IsActive          = Column(SmallInteger, default=1)
 
 
-class DiscoverySource(Base):
-    __tablename__ = "discovery_source"
+class Discovery_Source(Base):
+    __tablename__ = "ii_apibom_discovery_source"
 
-    SourceId     = Column(Integer, primary_key=True, autoincrement=True)
-    EndpointId   = Column(Integer, ForeignKey("api_endpoints.EndpointId"), nullable=False)
-    EngagementId = Column(Integer, ForeignKey("Engagement.EngagementId"), nullable=False)
+    Id           = Column("Id", Integer, primary_key=True, autoincrement=True)
+    EndpointId   = Column(Integer, ForeignKey("ii_apibom_endpoint.Id"), nullable=False)
+    EngagementId = Column(Integer, ForeignKey("ii_apibom_engagement.Id"), nullable=False)
     SourceName   = Column(String(100), nullable=False)
-    CreatedAt    = Column(DateTime, default=datetime.utcnow)
-    UpdatedAt    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    IsActive     = Column(SmallInteger, default=0)
+    CreatedDate  = Column(DateTime, default=datetime.utcnow)
+    UpdatedDate  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    IsActive     = Column(SmallInteger, default=1)
 
 
-class OWASPFinding(Base):
-    __tablename__ = "owasp_findings"
+class OWASP_Finding(Base):
+    __tablename__ = "ii_apibom_owasp_finding"
 
-    FindingId    = Column(Integer, primary_key=True, autoincrement=True)
-    EndpointId   = Column(Integer, ForeignKey("api_endpoints.EndpointId"))
-    EngagementId = Column(Integer, ForeignKey("Engagement.EngagementId"), nullable=False)
+    Id           = Column("Id", Integer, primary_key=True, autoincrement=True)
+    EndpointId   = Column(Integer, ForeignKey("ii_apibom_endpoint.Id"))
+    EngagementId = Column(Integer, ForeignKey("ii_apibom_engagement.Id"), nullable=False)
     Category     = Column(String(20))
     CategoryName = Column(String(200))
     Finding      = Column(Text)
-    Severity     = Column(Enum("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"), default="INFO")
+    Severity     = Column(String(20), default="INFO")
     Source       = Column(String(50))
     Remediation  = Column(Text)
     EndpointUrl  = Column(Text)
-    CreatedAt    = Column(DateTime, default=datetime.utcnow)
-    UpdatedAt    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    IsActive     = Column(SmallInteger, default=0)
+    CreatedDate  = Column(DateTime, default=datetime.utcnow)
+    UpdatedDate  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    IsActive     = Column(SmallInteger, default=1)
 
 
-class OWASPConformance(Base):
-    __tablename__ = "owasp_conformance"
+class OWASP_Conformance(Base):
+    __tablename__ = "ii_apibom_owasp_conformance"
 
-    ConformanceId    = Column(Integer, primary_key=True, autoincrement=True)
-    EngagementId     = Column(Integer, ForeignKey("Engagement.EngagementId"), nullable=False)
+    Id               = Column("Id", Integer, primary_key=True, autoincrement=True)
+    EngagementId     = Column(Integer, ForeignKey("ii_apibom_engagement.Id"), nullable=False)
     OWASPId          = Column(String(10))
     Name             = Column(String(200))
     Status           = Column(String(50))
     AffectedCount    = Column(Integer, default=0)
     Note             = Column(Text)
     ConformanceLevel = Column(String(100))
-    CreatedAt        = Column(DateTime, default=datetime.utcnow)
-    UpdatedAt        = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    IsActive         = Column(SmallInteger, default=0)
+    CreatedDate      = Column(DateTime, default=datetime.utcnow)
+    UpdatedDate      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    IsActive         = Column(SmallInteger, default=1)
 
 
-class SecretFinding(Base):
-    __tablename__ = "secret_findings"
+class Secret_Finding(Base):
+    __tablename__ = "ii_apibom_secret_finding"
 
-    SecretId       = Column(Integer, primary_key=True, autoincrement=True)
-    EngagementId   = Column(Integer, ForeignKey("Engagement.EngagementId"), nullable=False)
+    Id             = Column("Id", Integer, primary_key=True, autoincrement=True)
+    EngagementId   = Column(Integer, ForeignKey("ii_apibom_engagement.Id"), nullable=False)
     SecretType     = Column(String(100))
     FilePath       = Column(Text)
     LineNumber     = Column(Integer)
     Repo           = Column(Text)
     MatchPreview   = Column(String(200))
-    Severity       = Column(Enum("CRITICAL", "HIGH", "MEDIUM", "LOW"), default="CRITICAL")
+    Severity       = Column(String(20), default="CRITICAL")
     Recommendation = Column(Text)
-    CreatedAt      = Column(DateTime, default=datetime.utcnow)
-    UpdatedAt      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    IsActive       = Column(SmallInteger, default=0)
+    CreatedDate    = Column(DateTime, default=datetime.utcnow)
+    UpdatedDate    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    IsActive       = Column(SmallInteger, default=1)
 
 
-class OutboundApi(Base):
-    __tablename__ = "outbound_api"
+class Outbound_Api(Base):
+    __tablename__ = "ii_apibom_outboundapi"
 
-    OutboundApiId  = Column(Integer, primary_key=True, autoincrement=True)
-    EngagementId   = Column(Integer, ForeignKey("Engagement.EngagementId"), nullable=False)
+    Id             = Column("Id", Integer, primary_key=True, autoincrement=True)
+    EngagementId   = Column(Integer, ForeignKey("ii_apibom_engagement.Id"), nullable=False)
     Url            = Column(Text)
     Host           = Column(String(255))
     PathPrefix     = Column(String(255))
     HttpMethod     = Column(String(20), default="UNKNOWN")
     Integration    = Column(String(200))
     Category       = Column(String(100))
-    Exposure       = Column(Enum("External", "Internal"), default="External")
-    Risk           = Column(Enum("CRITICAL", "HIGH", "MEDIUM", "LOW"), default="MEDIUM")
+    Exposure       = Column(String(20), default="External")
+    Risk           = Column(String(20), default="MEDIUM")
     AuthMethod     = Column(String(100))
     SourceFiles    = Column(Text)
     LineNumber     = Column(Integer)
     Repo           = Column(Text)
     OWASPReference = Column(String(100))
     Recommendation = Column(Text)
-    CreatedAt      = Column(DateTime, default=datetime.utcnow)
-    UpdatedAt      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    IsActive       = Column(SmallInteger, default=0)
+    CreatedDate    = Column(DateTime, default=datetime.utcnow)
+    UpdatedDate    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    IsActive       = Column(SmallInteger, default=1)
 
 
-class OutboundDependency(Base):
-    __tablename__ = "outbound_dependency"
+class Package_Dependency(Base):
+    __tablename__ = "ii_apibom_package_dependency"
 
-    DependencyId   = Column(Integer, primary_key=True, autoincrement=True)
-    EngagementId   = Column(Integer, ForeignKey("Engagement.EngagementId"), nullable=False)
-    Integration    = Column(String(200))
-    Category       = Column(String(100))
-    Exposure       = Column(Enum("External", "Internal"), default="External")
-    Risk           = Column(Enum("CRITICAL", "HIGH", "MEDIUM", "LOW"), default="MEDIUM")
-    Recommendation = Column(Text)
-    CreatedAt      = Column(DateTime, default=datetime.utcnow)
-    UpdatedAt      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    IsActive       = Column(SmallInteger, default=0)
-
-
-class PackageDependency(Base):
-    __tablename__ = "package_dependency"
-
-    PackageId    = Column(Integer, primary_key=True, autoincrement=True)
-    EngagementId = Column(Integer, ForeignKey("Engagement.EngagementId"), nullable=False)
+    Id           = Column("Id", Integer, primary_key=True, autoincrement=True)
+    EngagementId = Column(Integer, ForeignKey("ii_apibom_engagement.Id"), nullable=False)
     Name         = Column(String(255))
     Version      = Column(String(100))
     Type         = Column(String(100))
     Ecosystem    = Column(String(100))
-    CreatedAt    = Column(DateTime, default=datetime.utcnow)
-    UpdatedAt    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    IsActive     = Column(SmallInteger, default=0)
+    CreatedDate  = Column(DateTime, default=datetime.utcnow)
+    UpdatedDate  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    IsActive     = Column(SmallInteger, default=1)
 
 
-class CVEFinding(Base):
-    __tablename__ = "CVEFinding"
+class CVE_Finding(Base):
+    __tablename__ = "ii_apibom_cve_finding"
 
-    CVEId         = Column(Integer, primary_key=True, autoincrement=True)
-    EndpointId    = Column(Integer, ForeignKey("api_endpoints.EndpointId"))
-    EngagementId  = Column(Integer, ForeignKey("Engagement.EngagementId"), nullable=False)
+    Id            = Column("Id", Integer, primary_key=True, autoincrement=True)
+    EndpointId    = Column(Integer, ForeignKey("ii_apibom_endpoint.Id"))
+    EngagementId  = Column(Integer, ForeignKey("ii_apibom_engagement.Id"), nullable=False)
     CVENumber     = Column(String(50))
     Description   = Column(Text)
     Severity      = Column(String(50))
     CVSS          = Column(Float)
     EndpointCount = Column(Integer, default=0)
-    CreatedAt     = Column(DateTime, default=datetime.utcnow)
-    UpdatedAt     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    IsActive      = Column(SmallInteger, default=0)
+    CreatedDate   = Column(DateTime, default=datetime.utcnow)
+    UpdatedDate   = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    IsActive      = Column(SmallInteger, default=1)
 
 
-class ScanPhaseLog(Base):
-    __tablename__ = "scan_phase_log"
+class Shadow_Rogue_Register(Base):
+    __tablename__ = "ii_apibom_shadow_rogue_register"
 
-    LogId          = Column(Integer, primary_key=True, autoincrement=True)
-    EngagementId   = Column(Integer, ForeignKey("Engagement.EngagementId"), nullable=False)
+    Id             = Column("Id", Integer, primary_key=True, autoincrement=True)
+    EngagementId   = Column(Integer, ForeignKey("ii_apibom_engagement.Id"), nullable=False)
+    EndpointId     = Column(Integer, ForeignKey("ii_apibom_endpoint.Id"), nullable=False)
+    Classification = Column(String(50), nullable=False)
+    RiskScore      = Column(Integer, default=0)
+    ActionRequired = Column(Text)
+    CreatedDate    = Column(DateTime, default=datetime.utcnow)
+    UpdatedDate    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    IsActive       = Column(SmallInteger, default=1)
+
+
+class Scan_Phase_Log(Base):
+    __tablename__ = "ii_apibom_scan_phase_log"
+
+    Id             = Column("Id", Integer, primary_key=True, autoincrement=True)
+    EngagementId   = Column(Integer, ForeignKey("ii_apibom_engagement.Id"), nullable=False)
     PhaseNumber    = Column(Integer)
     PhaseName      = Column(String(100))
-    Status         = Column(Enum("running", "completed", "skipped", "failed"), default="completed")
+    Status         = Column(String(50), default="completed")
     StartedAt      = Column(DateTime)
     CompletedAt    = Column(DateTime)
     EndpointsFound = Column(Integer, default=0)
     Notes          = Column(Text)
-    CreatedAt      = Column(DateTime, default=datetime.utcnow)
-    UpdatedAt      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    IsActive       = Column(SmallInteger, default=0)
-
-
-class ShadowRogueRegister(Base):
-    __tablename__ = "shadow_rogue_register"
-
-    RegistryId     = Column(Integer, primary_key=True, autoincrement=True)
-    EngagementId   = Column(Integer, ForeignKey("Engagement.EngagementId"), nullable=False)
-    EndpointId     = Column(Integer, ForeignKey("api_endpoints.EndpointId"), nullable=False)
-    Classification = Column(Enum("Shadow", "Rogue"), nullable=False)
-    RiskScore      = Column(Integer, default=0)
-    ActionRequired = Column(Text)
-    CreatedAt      = Column(DateTime, default=datetime.utcnow)
-    UpdatedAt      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    IsActive       = Column(SmallInteger, default=0)
+    CreatedDate    = Column(DateTime, default=datetime.utcnow)
+    UpdatedDate    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    IsActive       = Column(SmallInteger, default=1)
