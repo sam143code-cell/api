@@ -5,3 +5,5 @@ scans/
 Repository/
 *.pyc
 .env
+scans/
+test_scan.py

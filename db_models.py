@@ -226,3 +226,23 @@ class Scan_Phase_Log(Base):
     CreatedDate    = Column(DateTime, default=datetime.utcnow)
     UpdatedDate    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     IsActive       = Column(SmallInteger, default=1)
+
+class BOM_Report(Base):
+    __tablename__ = "ii_apibom_bom_report"
+
+    Id            = Column("Id", Integer, primary_key=True, autoincrement=True)
+    EngagementId  = Column(Integer, ForeignKey("ii_apibom_engagement.Id"), nullable=False)
+    Format        = Column(String(20), nullable=False)   
+    SpecVersion   = Column(String(20))                   
+    SerialNumber  = Column(String(100))                 
+    BomJson       = Column(Text(length=16777215))        
+    ComponentCount    = Column(Integer, default=0)
+    ServiceCount      = Column(Integer, default=0)
+    VulnerabilityCount = Column(Integer, default=0)
+    PackageCount      = Column(Integer, default=0)
+    SnippetCount      = Column(Integer, default=0)
+    RelationshipCount = Column(Integer, default=0)
+    GeneratedAt   = Column(DateTime)
+    CreatedDate   = Column(DateTime, default=datetime.utcnow)
+    UpdatedDate   = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    IsActive      = Column(SmallInteger, default=1)

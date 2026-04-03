@@ -1,9 +1,14 @@
 import os
 import re
+import sys
 import json
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from store.schema import APIEntry
+
+# bom.py lives at the repo root — insert root onto path so we can import it
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+from bom import generate_cyclonedx, generate_spdx
 
 
 def _risk_band(score: int) -> str:
@@ -186,10 +191,10 @@ def _extract_outbound_deps(entries: List[APIEntry]) -> List[Dict]:
     for pattern, name, category, exposure in _OUTBOUND_PATTERNS:
         if re.search(pattern, combined) and name not in found:
             found[name] = {
-                "integration":   name,
-                "category":      category,
-                "exposure":      exposure,
-                "risk":          "HIGH" if exposure == "External" else "MEDIUM",
+                "integration":    name,
+                "category":       category,
+                "exposure":       exposure,
+                "risk":           "HIGH" if exposure == "External" else "MEDIUM",
                 "recommendation": (
                     f"Validate all data from {name}. Rotate API keys. Implement circuit breakers."
                     if exposure == "External" else
@@ -267,6 +272,7 @@ def _detect_tech_stack(entries: List[APIEntry], cfg: dict = None) -> Dict:
     lang      = lang_map.get(runtime, "Unknown")
     has_react = any("component" in f or f.endswith((".tsx", ".jsx")) for f in files)
     frontend  = "React SPA" if has_react else "Unknown"
+
     indicators = []
     if has_express_params if 'has_express_params' in dir() else False:
         indicators.append("Express-style path parameters detected (/:id patterns)")
@@ -295,83 +301,83 @@ def _build_owasp_conformance(entries: List[APIEntry], all_flags: List[Dict]) -> 
 
     return [
         {
-            "owasp_id":         "API1",
-            "name":             "Broken Object Level Authorization (BOLA)",
-            "status":           "REQUIRES TESTING",
-            "affected_count":   param_eps,
-            "note":             f"{param_eps} parameterized endpoints — manual pen-test required.",
+            "owasp_id":          "API1",
+            "name":              "Broken Object Level Authorization (BOLA)",
+            "status":            "REQUIRES TESTING",
+            "affected_count":    param_eps,
+            "note":              f"{param_eps} parameterized endpoints — manual pen-test required.",
             "conformance_level": "Level 0 — Not Tested",
         },
         {
-            "owasp_id":         "API2",
-            "name":             "Broken Authentication",
-            "status":           "FAIL" if no_auth > 0 else "PASS",
-            "affected_count":   no_auth,
-            "note":             f"{no_auth} of {total} endpoints have no detectable authentication.",
+            "owasp_id":          "API2",
+            "name":              "Broken Authentication",
+            "status":            "FAIL" if no_auth > 0 else "PASS",
+            "affected_count":    no_auth,
+            "note":              f"{no_auth} of {total} endpoints have no detectable authentication.",
             "conformance_level": "Level 0 — Non-Conformant" if no_auth > 0 else "Level 2 — Conformant",
         },
         {
-            "owasp_id":         "API3",
-            "name":             "Broken Object Property Level Authorization",
-            "status":           "NOT TESTED",
-            "affected_count":   0,
-            "note":             "Requires runtime testing.",
+            "owasp_id":          "API3",
+            "name":              "Broken Object Property Level Authorization",
+            "status":            "NOT TESTED",
+            "affected_count":    0,
+            "note":              "Requires runtime testing.",
             "conformance_level": "Level 0 — Not Tested",
         },
         {
-            "owasp_id":         "API4",
-            "name":             "Unrestricted Resource Consumption",
-            "status":           "NOT TESTED",
-            "affected_count":   0,
-            "note":             "Rate limiting not assessable without live traffic.",
+            "owasp_id":          "API4",
+            "name":              "Unrestricted Resource Consumption",
+            "status":            "NOT TESTED",
+            "affected_count":    0,
+            "note":              "Rate limiting not assessable without live traffic.",
             "conformance_level": "Level 0 — Not Tested",
         },
         {
-            "owasp_id":         "API5",
-            "name":             "Broken Function Level Authorization",
-            "status":           "REQUIRES TESTING",
-            "affected_count":   len(flag_cats.get("API5", [])),
-            "note":             "Admin endpoints identified — role-based access validation required.",
+            "owasp_id":          "API5",
+            "name":              "Broken Function Level Authorization",
+            "status":            "REQUIRES TESTING",
+            "affected_count":    len(flag_cats.get("API5", [])),
+            "note":              "Admin endpoints identified — role-based access validation required.",
             "conformance_level": "Level 0 — Not Tested",
         },
         {
-            "owasp_id":         "API6",
-            "name":             "Unrestricted Access to Sensitive Business Flows",
-            "status":           "NOT TESTED",
-            "affected_count":   0,
-            "note":             "Requires business logic review and runtime testing.",
+            "owasp_id":          "API6",
+            "name":              "Unrestricted Access to Sensitive Business Flows",
+            "status":            "NOT TESTED",
+            "affected_count":    0,
+            "note":              "Requires business logic review and runtime testing.",
             "conformance_level": "Level 0 — Not Tested",
         },
         {
-            "owasp_id":         "API7",
-            "name":             "Server Side Request Forgery (SSRF)",
-            "status":           "NOT TESTED",
-            "affected_count":   0,
-            "note":             "Active probing not performed in passive mode.",
+            "owasp_id":          "API7",
+            "name":              "Server Side Request Forgery (SSRF)",
+            "status":            "NOT TESTED",
+            "affected_count":    0,
+            "note":              "Active probing not performed in passive mode.",
             "conformance_level": "Level 0 — Not Tested",
         },
         {
-            "owasp_id":         "API8",
-            "name":             "Security Misconfiguration",
-            "status":           "FAIL" if flag_cats.get("API8") else "PARTIAL",
-            "affected_count":   len(flag_cats.get("API8", [])),
-            "note":             f"{len(flag_cats.get('API8', []))} misconfiguration findings detected.",
+            "owasp_id":          "API8",
+            "name":              "Security Misconfiguration",
+            "status":            "FAIL" if flag_cats.get("API8") else "PARTIAL",
+            "affected_count":    len(flag_cats.get("API8", [])),
+            "note":              f"{len(flag_cats.get('API8', []))} misconfiguration findings detected.",
             "conformance_level": "Level 1 — Partial",
         },
         {
-            "owasp_id":         "API9",
-            "name":             "Improper Inventory Management",
-            "status":           "FAIL" if shadow > 0 else "PASS",
-            "affected_count":   shadow,
-            "note":             f"{shadow} unregistered endpoints discovered.",
+            "owasp_id":          "API9",
+            "name":              "Improper Inventory Management",
+            "status":            "FAIL" if shadow > 0 else "PASS",
+            "affected_count":    shadow,
+            "note":              f"{shadow} unregistered endpoints discovered.",
             "conformance_level": "Level 0 — Non-Conformant" if shadow > 0 else "Level 2 — Conformant",
         },
         {
-            "owasp_id":         "API10",
-            "name":             "Unsafe Consumption of APIs",
-            "status":           "REQUIRES REVIEW",
-            "affected_count":   len(flag_cats.get("API10", [])),
-            "note":             "External API integrations detected — consumption patterns require review.",
+            "owasp_id":          "API10",
+            "name":              "Unsafe Consumption of APIs",
+            "status":            "REQUIRES REVIEW",
+            "affected_count":    len(flag_cats.get("API10", [])),
+            "note":              "External API integrations detected — consumption patterns require review.",
             "conformance_level": "Level 0 — Not Tested",
         },
     ]
@@ -447,18 +453,18 @@ def _build_executive_summary(entries: List[APIEntry], counts: Dict,
                                secrets: List[Dict], outbound: List[Dict],
                                outbound_inventory: List[Dict],
                                app_name: str) -> Dict:
-    total           = counts.get("total", len(entries))
-    shadow_count    = counts.get("Shadow", 0)
-    rogue_count     = counts.get("Rogue", 0)
-    valid_count     = counts.get("Valid", 0)
-    crit_sens       = sum(1 for e in entries if e.data_sensitivity == "CRITICAL")
-    high_risk       = sum(1 for e in entries if e.risk_score >= 50)
-    secret_count    = len(secrets)
-    no_auth         = sum(1 for e in entries
-                          if (e.auth_type or "") in ("None detected", "UNKNOWN", "none", ""))
-    cve_count       = sum(len(e.cve_findings) for e in entries)
-    outbound_total  = len(outbound_inventory or [])
-    outbound_ext    = sum(1 for o in (outbound_inventory or []) if o.get("exposure") == "External")
+    total          = counts.get("total", len(entries))
+    shadow_count   = counts.get("Shadow", 0)
+    rogue_count    = counts.get("Rogue", 0)
+    valid_count    = counts.get("Valid", 0)
+    crit_sens      = sum(1 for e in entries if e.data_sensitivity == "CRITICAL")
+    high_risk      = sum(1 for e in entries if e.risk_score >= 50)
+    secret_count   = len(secrets)
+    no_auth        = sum(1 for e in entries
+                         if (e.auth_type or "") in ("None detected", "UNKNOWN", "none", ""))
+    cve_count      = sum(len(e.cve_findings) for e in entries)
+    outbound_total = len(outbound_inventory or [])
+    outbound_ext   = sum(1 for o in (outbound_inventory or []) if o.get("exposure") == "External")
 
     risk_level = (
         "CRITICAL" if (crit_sens >= 10 or secret_count >= 5 or high_risk >= 100) else
@@ -571,8 +577,8 @@ def _build_executive_summary(entries: List[APIEntry], counts: Dict,
     ]
 
     return {
-        "overall_risk":        risk_level,
-        "narrative":           narrative,
+        "overall_risk":  risk_level,
+        "narrative":     narrative,
         "key_metrics": {
             "inbound_apis_total":             total,
             "outbound_apis_total":            outbound_total,
@@ -637,7 +643,7 @@ class Reporter:
             if "severity" not in s:
                 s["severity"] = "CRITICAL"
 
-        package_deps          = getattr(self.store, "package_dependencies", [])
+        package_deps           = getattr(self.store, "package_dependencies", [])
         outbound_api_inventory = getattr(self.store, "outbound_api_inventory", [])
 
         outbound_deps     = _extract_outbound_deps(all_entries)
@@ -762,10 +768,49 @@ class Reporter:
             ],
         }
 
+        # ── write api_discovery_full.json (without BOMs first) ───────────────
         path = os.path.join(self.out_dir, "api_discovery_full.json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(output, f, indent=2)
         print(f"    JSON: {path}")
+
+        # ── BOM generation (automatic — part of reporter execution) ──────────
+        # Both generators receive the output dict already in memory.
+        # No disk read required. Results are written to their own files AND
+        # embedded back into api_discovery_full.json so _ingest() in routes.py
+        # can read them from a single file without any extra file I/O.
+        engagement_meta = {
+            "engagement":   self.engagement,
+            "client_name":  self.client_name,
+            "app_name":     self.app_name,
+            "generated_at": output["generated_at"],
+        }
+
+        cdx      = generate_cyclonedx(output, engagement_meta)
+        cdx_path = os.path.join(self.out_dir, "api_bom.cdx.json")
+        with open(cdx_path, "w", encoding="utf-8") as f:
+            json.dump(cdx, f, indent=2)
+        print(f"    JSON: {cdx_path}")
+        print(f"      CycloneDX — components:{len(cdx.get('components', []))}  "
+              f"services:{len(cdx.get('services', []))}  "
+              f"vulns:{len(cdx.get('vulnerabilities', []))}")
+
+        spdx      = generate_spdx(output, engagement_meta)
+        spdx_path = os.path.join(self.out_dir, "api_bom.spdx.json")
+        with open(spdx_path, "w", encoding="utf-8") as f:
+            json.dump(spdx, f, indent=2)
+        print(f"    JSON: {spdx_path}")
+        print(f"      SPDX     — packages:{len(spdx.get('packages', []))}  "
+              f"snippets:{len(spdx.get('snippets', []))}  "
+              f"relationships:{len(spdx.get('relationships', []))}")
+
+        # Embed both BOMs into the output dict and rewrite api_discovery_full.json
+        # so routes.py _ingest() picks them up under api_bom_cyclonedx / api_bom_spdx
+        output["api_bom_cyclonedx"] = cdx
+        output["api_bom_spdx"]      = spdx
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(output, f, indent=2)
+        # ── end BOM generation ────────────────────────────────────────────────
 
         reg_path = os.path.join(self.out_dir, "shadow_rogue_register.json")
         with open(reg_path, "w", encoding="utf-8") as f:

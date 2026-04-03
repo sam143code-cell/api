@@ -26,6 +26,7 @@ from db_models import (
     Package_Dependency,
     CVE_Finding,
     Shadow_Rogue_Register,
+    BOM_Report,
 )
 
 try:
@@ -369,6 +370,57 @@ def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
     db.bulk_save_objects(cve_rows)
     db.flush()
 
+    # ── BOM ingest ────────────────────────────────────────────────────────────
+    # reporter.py embeds api_bom_cyclonedx and api_bom_spdx into
+    # api_discovery_full.json after generating them — we read them here
+    # and persist each as a single JSON blob row in ii_apibom_bom_report.
+    bom_rows = []
+
+    cdx_data = body.get("api_bom_cyclonedx")
+    if cdx_data:
+        bom_rows.append(BOM_Report(
+            EngagementId       = engagement_id,
+            Format             = "cyclonedx",
+            SpecVersion        = cdx_data.get("specVersion", "1.6"),
+            SerialNumber       = cdx_data.get("serialNumber"),
+            BomJson            = json.dumps(cdx_data),
+            ComponentCount     = len(cdx_data.get("components", [])),
+            ServiceCount       = len(cdx_data.get("services", [])),
+            VulnerabilityCount = len(cdx_data.get("vulnerabilities", [])),
+            PackageCount       = 0,
+            SnippetCount       = 0,
+            RelationshipCount  = len(cdx_data.get("dependencies", [])),
+            GeneratedAt        = _parse_dt(
+                (cdx_data.get("metadata") or {}).get("timestamp")
+            ),
+            IsActive           = 1,
+        ))
+
+    spdx_data = body.get("api_bom_spdx")
+    if spdx_data:
+        bom_rows.append(BOM_Report(
+            EngagementId       = engagement_id,
+            Format             = "spdx",
+            SpecVersion        = spdx_data.get("spdxVersion", "SPDX-2.3"),
+            SerialNumber       = spdx_data.get("documentNamespace"),
+            BomJson            = json.dumps(spdx_data),
+            ComponentCount     = 0,
+            ServiceCount       = 0,
+            VulnerabilityCount = 0,
+            PackageCount       = len(spdx_data.get("packages", [])),
+            SnippetCount       = len(spdx_data.get("snippets", [])),
+            RelationshipCount  = len(spdx_data.get("relationships", [])),
+            GeneratedAt        = _parse_dt(
+                (spdx_data.get("creationInfo") or {}).get("created")
+            ),
+            IsActive           = 1,
+        ))
+
+    if bom_rows:
+        db.bulk_save_objects(bom_rows)
+        db.flush()
+    # ── end BOM ingest ────────────────────────────────────────────────────────
+
     engagement.CompletedAt = datetime.utcnow()
     db.commit()
 
@@ -382,6 +434,7 @@ def _ingest(db: Session, output_path: str, engagement_id: int) -> dict:
         "packages":      len(package_rows),
         "cve_findings":  len(cve_rows),
         "shadow_rogue":  len(shadow_rogue_rows),
+        "bom_reports":   len(bom_rows),
     }
 
 
@@ -585,4 +638,4 @@ async def list_scans():
 
 @router.get("/health", summary="Health check")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok"} 
